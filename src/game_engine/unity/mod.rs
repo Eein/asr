@@ -17,9 +17,11 @@
 //!
 //! // We access a class called "Timer" in that DLL.
 //! let timer_class = image.wait_get_class(&process, &module, "Timer").await;
+//! // Get the parent class
+//! let timer_class_parent = timer_class.wait_get_parent(&process, &module).await;
 //! // We access a static field called "_instance" representing the singleton
 //! // instance of the class.
-//! let instance = timer_class.wait_get_static_instance(&process, &module, "_instance").await;
+//! let instance = timer_class_parent.wait_get_static_instance(&process, &module, "_instance").await;
 //!
 //! // Once we have the address of the instance, we want to access one of its
 //! // fields, so we get the offset of the "currentTime" field.
