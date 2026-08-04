@@ -61,31 +61,48 @@ impl Module {
         };
 
         let type_info_definition_table: Address = {
-            const GLOBAL_METADATA: Signature<20> =
-                Signature::new("67 6C 6F 62 61 6C 2D 6D 65 74 61 64 61 74 61 2E 64 61 74 00");
-            let s_metadata = GLOBAL_METADATA.scan_process_range(process, il2cpp_module)?;
+            (|| {
+                const GLOBAL_METADATA: Signature<20> =
+                    Signature::new("67 6C 6F 62 61 6C 2D 6D 65 74 61 64 61 74 61 2E 64 61 74 00");
+                let s_metadata = GLOBAL_METADATA.scan_process_range(process, il2cpp_module)?;
 
-            const LEA: Signature<3> = Signature::new("48 8D 0D");
-            let lea: Address = LEA
-                .scan_iter(process, il2cpp_module)
-                .map(|addr| addr + 3)
-                .find(|&addr| {
-                    let Ok(offset) = process.read::<i32>(addr) else {
-                        return false;
-                    };
+                const LEA: Signature<3> = Signature::new("48 8D 0D");
+                let lea: Address = LEA
+                    .scan_iter(process, il2cpp_module)
+                    .map(|addr| addr + 3)
+                    .find(|&addr| {
+                        let Ok(offset) = process.read::<i32>(addr) else {
+                            return false;
+                        };
 
-                    addr + 0x4 + offset == s_metadata
-                })?;
+                        addr + 0x4 + offset == s_metadata
+                    })?;
 
-            const SHR: Signature<3> = Signature::new("48 C1 E9");
-            let shr: Address = SHR
-                .scan_process_range(process, (lea, 0x200))
-                .map(|addr| addr + 3)?;
+                const SHR: Signature<3> = Signature::new("48 C1 E9");
+                let shr: Address = SHR
+                    .scan_process_range(process, (lea, 0x200))
+                    .map(|addr| addr + 3)?;
 
-            const RAX: Signature<3> = Signature::new("48 89 05");
-            RAX.scan_process_range(process, (shr, 0x100))
-                .map(|addr| addr + 3)
-                .and_then(|addr| Some(addr + 0x4 + process.read::<i32>(addr).ok()?))?
+                const RAX: Signature<3> = Signature::new("48 89 05");
+                RAX.scan_process_range(process, (shr, 0x100))
+                    .map(|addr| addr + 3)
+                    .and_then(|addr| Some(addr + 0x4 + process.read::<i32>(addr).ok()?))
+            })()
+            .or_else(|| {
+                const TYPE_INFO_DEFINITION_TABLE: Signature<10> =
+                    Signature::new("48 83 3C ?? 00 75 ?? 8B C? E8");
+
+                let addr = TYPE_INFO_DEFINITION_TABLE
+                    .scan_process_range(process, il2cpp_module)?
+                    .add_signed(-4);
+                let target = addr + 0x4 + process.read::<i32>(addr).ok()?;
+
+                process
+                    .read_pointer(target, pointer_size)
+                    .ok()
+                    .filter(|value| !value.is_null())
+                    .map(|_| target)
+            })?
         };
 
         Some(Self {
